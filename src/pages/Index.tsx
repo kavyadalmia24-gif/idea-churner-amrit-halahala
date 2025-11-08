@@ -4,6 +4,10 @@ import { toast } from "sonner";
 import WaveBackground from "@/components/WaveBackground";
 import IdeaInput from "@/components/IdeaInput";
 import AnalysisResults from "@/components/AnalysisResults";
+import ChurningAnimation from "@/components/ChurningAnimation";
+import HistoryInsight from "@/components/HistoryInsight";
+import WisdomLevel from "@/components/WisdomLevel";
+import { useWisdomTracking } from "@/hooks/useWisdomTracking";
 
 interface Analysis {
   amrit: {
@@ -26,36 +30,96 @@ interface Analysis {
 
 const Index = () => {
   const [analysis, setAnalysis] = useState<Analysis | null>(null);
+  const [analysisB, setAnalysisB] = useState<Analysis | null>(null);
   const [isLoading, setIsLoading] = useState(false);
   const [showShivaMode, setShowShivaMode] = useState(false);
   const [deeperAnalysis, setDeeperAnalysis] = useState(false);
+  const [showChurningAnimation, setShowChurningAnimation] = useState(false);
+  const [showHistoryInsight, setShowHistoryInsight] = useState(false);
+  const [isHumanityMode, setIsHumanityMode] = useState(false);
+  const [isCompareMode, setIsCompareMode] = useState(false);
 
-  const handleChurn = async (idea: string) => {
+  const { wisdomData, recordChurn, shouldShowInsight } = useWisdomTracking();
+
+  const handleChurn = async (ideaA: string, ideaB?: string) => {
     setIsLoading(true);
+    setShowChurningAnimation(true);
     setAnalysis(null);
+    setAnalysisB(null);
+    setIsCompareMode(!!ideaB);
 
     try {
-      const { data, error } = await supabase.functions.invoke("churn-idea", {
-        body: { idea, deeperAnalysis },
-      });
+      // Handle comparison mode
+      if (ideaB) {
+        const [resultA, resultB] = await Promise.all([
+          supabase.functions.invoke("churn-idea", {
+            body: { idea: ideaA, deeperAnalysis, isHumanityMode },
+          }),
+          supabase.functions.invoke("churn-idea", {
+            body: { idea: ideaB, deeperAnalysis, isHumanityMode },
+          }),
+        ]);
 
-      if (error) {
-        console.error("Function error:", error);
-        toast.error(error.message || "Failed to analyze idea");
-        return;
+        if (resultA.error || resultB.error) {
+          console.error("Function errors:", resultA.error, resultB.error);
+          toast.error("Failed to analyze one or both ideas");
+          setShowChurningAnimation(false);
+          return;
+        }
+
+        if (!resultA.data || !resultB.data) {
+          toast.error("No response from analysis");
+          setShowChurningAnimation(false);
+          return;
+        }
+
+        setAnalysis(resultA.data);
+        setAnalysisB(resultB.data);
+
+        // Record both churns
+        const countAfterA = recordChurn(resultA.data.bvi.score);
+        const countAfterB = recordChurn(resultB.data.bvi.score);
+
+        if (shouldShowInsight(countAfterB)) {
+          setShowHistoryInsight(true);
+        }
+
+        setDeeperAnalysis(false);
+        toast.success("Both ideas analyzed!");
+      } else {
+        // Single idea mode
+        const { data, error } = await supabase.functions.invoke("churn-idea", {
+          body: { idea: ideaA, deeperAnalysis, isHumanityMode },
+        });
+
+        if (error) {
+          console.error("Function error:", error);
+          toast.error(error.message || "Failed to analyze idea");
+          setShowChurningAnimation(false);
+          return;
+        }
+
+        if (!data) {
+          toast.error("No response from analysis");
+          setShowChurningAnimation(false);
+          return;
+        }
+
+        setAnalysis(data);
+
+        // Record churn and check for insight
+        const churnCount = recordChurn(data.bvi.score);
+        if (shouldShowInsight(churnCount)) {
+          setShowHistoryInsight(true);
+        }
+
+        setDeeperAnalysis(false);
+        toast.success("Analysis complete!");
       }
-
-      if (!data) {
-        toast.error("No response from analysis");
-        return;
-      }
-
-      setAnalysis(data);
-      setDeeperAnalysis(false);
-      toast.success("Analysis complete!");
     } catch (error) {
       console.error("Error:", error);
       toast.error("Failed to connect to analysis service");
+      setShowChurningAnimation(false);
     } finally {
       setIsLoading(false);
     }
@@ -63,20 +127,30 @@ const Index = () => {
 
   const handleChurnAgain = () => {
     setDeeperAnalysis(true);
-    if (analysis) {
-      // Re-analyze with deeper mode
-      const lastIdea = localStorage.getItem("lastIdea");
-      if (lastIdea) {
-        handleChurn(lastIdea);
-      }
-    }
+    setAnalysis(null);
+    setAnalysisB(null);
   };
 
   return (
     <div className="min-h-screen relative overflow-hidden">
       <WaveBackground />
 
-      <div className="relative z-10 container mx-auto px-4 py-12 max-w-4xl">
+      {/* Wisdom Level Badge */}
+      {wisdomData.churnCount > 0 && (
+        <WisdomLevel churnCount={wisdomData.churnCount} avgBVI={wisdomData.avgBVI} />
+      )}
+
+      {/* Churning Animation */}
+      {showChurningAnimation && (
+        <ChurningAnimation onComplete={() => setShowChurningAnimation(false)} />
+      )}
+
+      {/* History Insight Easter Egg */}
+      {showHistoryInsight && (
+        <HistoryInsight onClose={() => setShowHistoryInsight(false)} />
+      )}
+
+      <div className="relative z-10 container mx-auto px-4 py-12 max-w-6xl">
         {/* Header */}
         <header className="text-center mb-12 space-y-4 animate-float">
           <h1 className="text-5xl md:text-6xl font-bold text-gradient-gold mb-2">
@@ -99,18 +173,19 @@ const Index = () => {
         <main className="space-y-8">
           {!analysis ? (
             <IdeaInput
-              onChurn={(idea) => {
-                localStorage.setItem("lastIdea", idea);
-                handleChurn(idea);
-              }}
+              onChurn={handleChurn}
               isLoading={isLoading}
+              isHumanityMode={isHumanityMode}
+              onToggleHumanityMode={setIsHumanityMode}
             />
           ) : (
             <AnalysisResults
               analysis={analysis}
+              analysisB={analysisB || undefined}
               onChurnAgain={handleChurnAgain}
               showShivaMode={showShivaMode}
               onToggleShivaMode={setShowShivaMode}
+              isCompareMode={isCompareMode}
             />
           )}
         </main>

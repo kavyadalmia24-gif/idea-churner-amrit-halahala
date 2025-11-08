@@ -11,7 +11,7 @@ serve(async (req) => {
   }
 
   try {
-    const { idea, deeperAnalysis = false } = await req.json();
+    const { idea, deeperAnalysis = false, isHumanityMode = false } = await req.json();
     const LOVABLE_API_KEY = Deno.env.get("LOVABLE_API_KEY");
     
     if (!LOVABLE_API_KEY) {
@@ -24,6 +24,10 @@ serve(async (req) => {
 
     console.log("Churning idea:", idea);
 
+    const modeContext = isHumanityMode 
+      ? 'HUMANITY MODE: Analyze this as a global-scale challenge affecting humanity. Consider worldwide impact, systemic issues, and collective solutions.'
+      : '';
+
     const systemPrompt = `You are Manthan AI, an ancient wisdom keeper inspired by the Samudra Manthan (Ocean Churning). Your role is to reveal BOTH the Amrit (nectar/benefits) and Halahala (poison/risks) hidden within every idea.
 
 Follow these guidelines:
@@ -35,7 +39,8 @@ Follow these guidelines:
 
 Your analysis should help people make wiser decisions by seeing the complete picture - both the treasures and dangers of their chosen path.
 
-${deeperAnalysis ? "DEEPER ANALYSIS MODE: Provide more detailed reasoning, explore edge cases, and dig into second-order effects." : ""}`;
+${deeperAnalysis ? "DEEPER ANALYSIS MODE: Provide more detailed reasoning, explore edge cases, and dig into second-order effects." : ""}
+${modeContext}`;
 
     const userPrompt = `Analyze this idea/goal and reveal its complete nature:
 
