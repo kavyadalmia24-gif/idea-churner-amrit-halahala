@@ -1,0 +1,4 @@
+project_id = "tdvnfrxfaqrgiyyyzkab"
+
+[functions.churn-idea]
+verify_jwt = false
