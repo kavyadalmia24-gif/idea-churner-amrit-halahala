@@ -114,14 +114,22 @@ Provide your analysis in this exact JSON format:
     }
 
     const data = await response.json();
-    const content = data.choices[0].message.content;
+    let content = data.choices[0].message.content;
     console.log("AI response:", content);
+
+    // Strip markdown code blocks if present
+    if (content.startsWith("```json")) {
+      content = content.replace(/^```json\s*/, "").replace(/\s*```$/, "");
+    } else if (content.startsWith("```")) {
+      content = content.replace(/^```\s*/, "").replace(/\s*```$/, "");
+    }
 
     let analysis;
     try {
-      analysis = JSON.parse(content);
+      analysis = JSON.parse(content.trim());
     } catch (e) {
       console.error("Failed to parse AI response:", e);
+      console.error("Content that failed to parse:", content);
       return new Response(
         JSON.stringify({ error: "Failed to parse analysis" }),
         { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
