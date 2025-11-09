@@ -8,8 +8,7 @@ import IdeaInput from "@/components/IdeaInput";
 import AnalysisResults from "@/components/AnalysisResults";
 import ChurningAnimation from "@/components/ChurningAnimation";
 import HistoryInsight from "@/components/HistoryInsight";
-import ChatSidebar from "@/components/ChatSidebar";
-import ChatInterface from "@/components/ChatInterface";
+import WisdomLevel from "@/components/WisdomLevel";
 import { useWisdomTracking } from "@/hooks/useWisdomTracking";
 
 interface Analysis {
@@ -42,8 +41,6 @@ const Index = () => {
   const [showHistoryInsight, setShowHistoryInsight] = useState(false);
   const [isHumanityMode, setIsHumanityMode] = useState(false);
   const [isCompareMode, setIsCompareMode] = useState(false);
-  const [currentConversationId, setCurrentConversationId] = useState<string | null>(null);
-  const [showChat, setShowChat] = useState(false);
   const navigate = useNavigate();
 
   const { wisdomData, recordChurn, shouldShowInsight } = useWisdomTracking();
@@ -69,25 +66,7 @@ const Index = () => {
     return () => subscription.unsubscribe();
   }, [navigate]);
 
-  const createNewConversation = async (title: string) => {
-    if (!user) return null;
-
-    try {
-      const { data, error } = await supabase
-        .from('conversations')
-        .insert({ title, user_id: user.id })
-        .select()
-        .single();
-
-      if (error) throw error;
-      return data.id;
-    } catch (error) {
-      console.error('Error creating conversation:', error);
-      return null;
-    }
-  };
-
-  const saveToHistory = async (ideaA: string, ideaB: string | null, analysisData: Analysis, conversationId: string) => {
+  const saveToHistory = async (ideaA: string, ideaB: string | null, analysisData: Analysis) => {
     if (!user) return;
     
     try {
@@ -100,7 +79,6 @@ const Index = () => {
         halahala_view: JSON.stringify(analysisData.halahala),
         bvi_score: analysisData.bvi.score,
         shiva_mode: JSON.stringify(analysisData.shivaMode || {}),
-        conversation_id: conversationId,
       });
     } catch (error) {
       console.error("Failed to save to history:", error);
@@ -113,17 +91,6 @@ const Index = () => {
     setAnalysis(null);
     setAnalysisB(null);
     setIsCompareMode(!!ideaB);
-    setShowChat(false);
-
-    // Create new conversation
-    const title = ideaB 
-      ? `${ideaA.slice(0, 30)}... vs ${ideaB.slice(0, 30)}...`
-      : ideaA.slice(0, 50) + (ideaA.length > 50 ? '...' : '');
-    
-    const conversationId = await createNewConversation(title);
-    if (conversationId) {
-      setCurrentConversationId(conversationId);
-    }
 
     try {
       // Handle comparison mode
@@ -154,16 +121,7 @@ const Index = () => {
         setAnalysisB(resultB.data);
 
         // Save both to history
-        if (conversationId) {
-          await saveToHistory(ideaA, ideaB, resultA.data, conversationId);
-
-          // Save initial churn as system message
-          await supabase.from('messages').insert({
-            conversation_id: conversationId,
-            role: 'system',
-            content: `Churned ideas:\nA: "${ideaA}"\nB: "${ideaB}"\n\nBVI Scores: A=${resultA.data.bvi.score}, B=${resultB.data.bvi.score}`,
-          });
-        }
+        await saveToHistory(ideaA, ideaB, resultA.data);
 
         // Record both churns
         const countAfterA = recordChurn(resultA.data.bvi.score);
@@ -174,7 +132,6 @@ const Index = () => {
         }
 
         setDeeperAnalysis(false);
-        setShowChat(true);
         toast.success("Both ideas analyzed!");
       } else {
         // Single idea mode
@@ -198,16 +155,7 @@ const Index = () => {
         setAnalysis(data);
 
         // Save to history
-        if (conversationId) {
-          await saveToHistory(ideaA, null, data, conversationId);
-
-          // Save initial churn as system message
-          await supabase.from('messages').insert({
-            conversation_id: conversationId,
-            role: 'system',
-            content: `Churned idea: "${ideaA}"\n\nAmrit View: ${JSON.stringify(data.amrit)}\n\nHalahala View: ${JSON.stringify(data.halahala)}\n\nBVI Score: ${data.bvi.score}`,
-          });
-        }
+        await saveToHistory(ideaA, null, data);
 
         // Record churn and check for insight
         const churnCount = recordChurn(data.bvi.score);
@@ -216,7 +164,6 @@ const Index = () => {
         }
 
         setDeeperAnalysis(false);
-        setShowChat(true);
         toast.success("Analysis complete!");
       }
     } catch (error) {
@@ -232,129 +179,79 @@ const Index = () => {
     setDeeperAnalysis(true);
     setAnalysis(null);
     setAnalysisB(null);
-    setShowChat(false);
-  };
-
-  const handleNewChat = () => {
-    setCurrentConversationId(null);
-    setAnalysis(null);
-    setAnalysisB(null);
-    setShowChat(false);
-    setDeeperAnalysis(false);
-  };
-
-  const handleSelectConversation = async (id: string) => {
-    setCurrentConversationId(id);
-    setShowChat(true);
-    setAnalysis(null);
-    setAnalysisB(null);
-    
-    // Load the churn history for this conversation to show results
-    const { data } = await supabase
-      .from('churn_history')
-      .select('*')
-      .eq('conversation_id', id)
-      .single();
-    
-    if (data) {
-      const amritView = JSON.parse(data.amrit_view);
-      const halahalaView = JSON.parse(data.halahala_view);
-      const shivaMode = data.shiva_mode ? JSON.parse(data.shiva_mode) : undefined;
-      
-      setAnalysis({
-        amrit: amritView,
-        halahala: halahalaView,
-        bvi: { score: data.bvi_score, reasoning: "" },
-        shivaMode: shivaMode,
-      });
-    }
   };
 
   return (
-    <div className="min-h-screen flex w-full">
-      <ChatSidebar
-        currentConversationId={currentConversationId}
-        onSelectConversation={handleSelectConversation}
-        onNewChat={handleNewChat}
-        churnCount={wisdomData.churnCount}
-        avgBVI={wisdomData.avgBVI}
-      />
+    <div className="min-h-screen relative overflow-hidden">
+      <WaveBackground />
 
-      <div className="flex-1 relative overflow-hidden">
-        <WaveBackground />
+      {/* Wisdom Level Badge */}
+      {wisdomData.churnCount > 0 && (
+        <WisdomLevel churnCount={wisdomData.churnCount} avgBVI={wisdomData.avgBVI} />
+      )}
 
-        {/* Churning Animation */}
-        {showChurningAnimation && (
-          <ChurningAnimation onComplete={() => setShowChurningAnimation(false)} />
-        )}
+      {/* Churning Animation */}
+      {showChurningAnimation && (
+        <ChurningAnimation onComplete={() => setShowChurningAnimation(false)} />
+      )}
 
-        {/* History Insight Easter Egg */}
-        {showHistoryInsight && (
-          <HistoryInsight onClose={() => setShowHistoryInsight(false)} />
-        )}
+      {/* History Insight Easter Egg */}
+      {showHistoryInsight && (
+        <HistoryInsight onClose={() => setShowHistoryInsight(false)} />
+      )}
 
-        <div className="relative z-10 h-screen flex flex-col">
-          {/* Header */}
-          <header className="border-b border-border bg-card/50 backdrop-blur-sm">
-            <div className="container mx-auto px-4 py-4 flex justify-between items-center">
-              <div>
-                <h1 className="text-2xl font-bold text-gradient-gold">
-                  मंथन AI
-                </h1>
-                <p className="text-xs text-muted-foreground">
-                  Churning Ideas into Wisdom
-                </p>
-              </div>
-              <button
-                onClick={() => navigate('/profile')}
-                className="px-4 py-2 rounded-lg bg-card border border-border hover:bg-muted/50 transition-colors text-sm"
-              >
-                View Profile
-              </button>
-            </div>
-          </header>
+      <div className="relative z-10 container mx-auto px-4 py-12 max-w-6xl">
+        {/* Header */}
+        <header className="text-center mb-12 space-y-4 animate-float">
+          <div className="flex justify-end mb-4">
+            <button
+              onClick={() => navigate("/profile")}
+              className="text-sm text-primary hover:underline"
+            >
+              View Profile & History
+            </button>
+          </div>
+          <h1 className="text-5xl md:text-6xl font-bold text-gradient-gold mb-2">
+            मंथन AI
+          </h1>
+          <h2 className="text-2xl md:text-3xl font-semibold text-foreground">
+            The Idea Churner
+          </h2>
+          <p className="text-muted-foreground text-lg max-w-2xl mx-auto">
+            Every idea hides both nectar and poison. Let's churn both before you drink.
+          </p>
+          <div className="flex items-center justify-center gap-2 text-sm text-muted-foreground/70 italic">
+            <span className="text-primary">~</span>
+            <span>Inspired by Samudra Manthan</span>
+            <span className="text-primary">~</span>
+          </div>
+        </header>
 
-          {/* Main Content */}
-          <main className="flex-1 overflow-hidden">
-            {showChat && currentConversationId ? (
-              <div className="h-full flex flex-col">
-                {analysis && (
-                  <div className="border-b border-border bg-card/50 p-4 max-h-[40vh] overflow-y-auto">
-                    <AnalysisResults
-                      analysis={analysis}
-                      analysisB={analysisB || undefined}
-                      onChurnAgain={handleChurnAgain}
-                      showShivaMode={showShivaMode}
-                      onToggleShivaMode={setShowShivaMode}
-                      isCompareMode={isCompareMode}
-                    />
-                  </div>
-                )}
-                <ChatInterface conversationId={currentConversationId} />
-              </div>
-            ) : !analysis ? (
-              <div className="h-full flex items-center justify-center p-4">
-                <IdeaInput
-                  onChurn={handleChurn}
-                  isLoading={isLoading}
-                  isHumanityMode={isHumanityMode}
-                  onToggleHumanityMode={setIsHumanityMode}
-                />
-              </div>
-            ) : (
-              <div className="h-full flex items-center justify-center p-4">
-                <AnalysisResults
-                  analysis={analysis}
-                  analysisB={analysisB || undefined}
-                  onChurnAgain={handleChurnAgain}
-                  showShivaMode={showShivaMode}
-                  onToggleShivaMode={setShowShivaMode}
-                  isCompareMode={isCompareMode}
-                />
-              </div>
-            )}
-          </main>
-        </div>
+        {/* Main Content */}
+        <main className="space-y-8">
+          {!analysis ? (
+            <IdeaInput
+              onChurn={handleChurn}
+              isLoading={isLoading}
+              isHumanityMode={isHumanityMode}
+              onToggleHumanityMode={setIsHumanityMode}
+            />
+          ) : (
+            <AnalysisResults
+              analysis={analysis}
+              analysisB={analysisB || undefined}
+              onChurnAgain={handleChurnAgain}
+              showShivaMode={showShivaMode}
+              onToggleShivaMode={setShowShivaMode}
+              isCompareMode={isCompareMode}
+            />
+          )}
+        </main>
+
+        {/* Footer */}
+        <footer className="mt-16 text-center text-sm text-muted-foreground/60">
+          <p>Ancient wisdom meets modern AI reasoning</p>
+        </footer>
       </div>
     </div>
   );
