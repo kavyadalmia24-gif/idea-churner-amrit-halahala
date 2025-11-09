@@ -14,7 +14,66 @@ export type Database = {
   }
   public: {
     Tables: {
-      [_ in never]: never
+      churn_history: {
+        Row: {
+          amrit_view: string
+          bvi_score: number
+          created_at: string
+          halahala_view: string
+          id: string
+          idea_b_text: string | null
+          idea_text: string
+          is_humanity_mode: boolean | null
+          shiva_mode: string
+          user_id: string
+        }
+        Insert: {
+          amrit_view: string
+          bvi_score: number
+          created_at?: string
+          halahala_view: string
+          id?: string
+          idea_b_text?: string | null
+          idea_text: string
+          is_humanity_mode?: boolean | null
+          shiva_mode: string
+          user_id: string
+        }
+        Update: {
+          amrit_view?: string
+          bvi_score?: number
+          created_at?: string
+          halahala_view?: string
+          id?: string
+          idea_b_text?: string | null
+          idea_text?: string
+          is_humanity_mode?: boolean | null
+          shiva_mode?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
+      profiles: {
+        Row: {
+          created_at: string
+          display_name: string | null
+          email: string | null
+          id: string
+        }
+        Insert: {
+          created_at?: string
+          display_name?: string | null
+          email?: string | null
+          id: string
+        }
+        Update: {
+          created_at?: string
+          display_name?: string | null
+          email?: string | null
+          id?: string
+        }
+        Relationships: []
+      }
     }
     Views: {
       [_ in never]: never

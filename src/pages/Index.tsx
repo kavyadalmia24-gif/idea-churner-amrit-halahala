@@ -1,6 +1,8 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
+import { useNavigate } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
+import { User } from "@supabase/supabase-js";
 import WaveBackground from "@/components/WaveBackground";
 import IdeaInput from "@/components/IdeaInput";
 import AnalysisResults from "@/components/AnalysisResults";
@@ -29,6 +31,7 @@ interface Analysis {
 }
 
 const Index = () => {
+  const [user, setUser] = useState<User | null>(null);
   const [analysis, setAnalysis] = useState<Analysis | null>(null);
   const [analysisB, setAnalysisB] = useState<Analysis | null>(null);
   const [isLoading, setIsLoading] = useState(false);
@@ -38,8 +41,49 @@ const Index = () => {
   const [showHistoryInsight, setShowHistoryInsight] = useState(false);
   const [isHumanityMode, setIsHumanityMode] = useState(false);
   const [isCompareMode, setIsCompareMode] = useState(false);
+  const navigate = useNavigate();
 
   const { wisdomData, recordChurn, shouldShowInsight } = useWisdomTracking();
+
+  useEffect(() => {
+    // Check authentication
+    supabase.auth.getSession().then(({ data: { session } }) => {
+      if (!session) {
+        navigate("/auth");
+      } else {
+        setUser(session.user);
+      }
+    });
+
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
+      if (!session) {
+        navigate("/auth");
+      } else {
+        setUser(session.user);
+      }
+    });
+
+    return () => subscription.unsubscribe();
+  }, [navigate]);
+
+  const saveToHistory = async (ideaA: string, ideaB: string | null, analysisData: Analysis) => {
+    if (!user) return;
+    
+    try {
+      await supabase.from("churn_history").insert({
+        user_id: user.id,
+        idea_text: ideaA,
+        idea_b_text: ideaB,
+        is_humanity_mode: isHumanityMode,
+        amrit_view: JSON.stringify(analysisData.amrit),
+        halahala_view: JSON.stringify(analysisData.halahala),
+        bvi_score: analysisData.bvi.score,
+        shiva_mode: JSON.stringify(analysisData.shivaMode || {}),
+      });
+    } catch (error) {
+      console.error("Failed to save to history:", error);
+    }
+  };
 
   const handleChurn = async (ideaA: string, ideaB?: string) => {
     setIsLoading(true);
@@ -76,6 +120,9 @@ const Index = () => {
         setAnalysis(resultA.data);
         setAnalysisB(resultB.data);
 
+        // Save both to history
+        await saveToHistory(ideaA, ideaB, resultA.data);
+
         // Record both churns
         const countAfterA = recordChurn(resultA.data.bvi.score);
         const countAfterB = recordChurn(resultB.data.bvi.score);
@@ -106,6 +153,9 @@ const Index = () => {
         }
 
         setAnalysis(data);
+
+        // Save to history
+        await saveToHistory(ideaA, null, data);
 
         // Record churn and check for insight
         const churnCount = recordChurn(data.bvi.score);
@@ -153,6 +203,14 @@ const Index = () => {
       <div className="relative z-10 container mx-auto px-4 py-12 max-w-6xl">
         {/* Header */}
         <header className="text-center mb-12 space-y-4 animate-float">
+          <div className="flex justify-end mb-4">
+            <button
+              onClick={() => navigate("/profile")}
+              className="text-sm text-primary hover:underline"
+            >
+              View Profile & History
+            </button>
+          </div>
           <h1 className="text-5xl md:text-6xl font-bold text-gradient-gold mb-2">
             मंथन AI
           </h1>
