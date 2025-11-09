@@ -4,8 +4,9 @@ import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Separator } from "@/components/ui/separator";
 import WaveBackground from "@/components/WaveBackground";
+import WisdomLevel from "@/components/WisdomLevel";
+import { useWisdomTracking } from "@/hooks/useWisdomTracking";
 import { ArrowLeft, LogOut, Trash2 } from "lucide-react";
 import { formatDistanceToNow } from "date-fns";
 
@@ -26,6 +27,7 @@ const Profile = () => {
   const [history, setHistory] = useState<ChurnHistory[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const navigate = useNavigate();
+  const { wisdomData } = useWisdomTracking();
 
   useEffect(() => {
     loadProfile();
@@ -123,7 +125,13 @@ const Profile = () => {
           <CardHeader>
             <CardTitle className="text-2xl text-gradient-gold">Your Profile</CardTitle>
           </CardHeader>
-          <CardContent className="space-y-2">
+          <CardContent className="space-y-4">
+            <div className="mb-4">
+              <WisdomLevel 
+                churnCount={wisdomData.churnCount} 
+                avgBVI={wisdomData.avgBVI}
+              />
+            </div>
             <div>
               <span className="text-muted-foreground">Name: </span>
               <span className="font-medium">{profile?.display_name || "Not set"}</span>
