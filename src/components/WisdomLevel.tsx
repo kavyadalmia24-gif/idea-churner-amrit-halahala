@@ -3,6 +3,7 @@ import { Award } from "lucide-react";
 interface WisdomLevelProps {
   churnCount: number;
   avgBVI: number;
+  compact?: boolean;
 }
 
 const getWisdomLevel = (count: number) => {
@@ -13,8 +14,24 @@ const getWisdomLevel = (count: number) => {
   return { title: "Seeker", icon: "🔍", color: "text-green-400" };
 };
 
-const WisdomLevel = ({ churnCount, avgBVI }: WisdomLevelProps) => {
+const WisdomLevel = ({ churnCount, avgBVI, compact = false }: WisdomLevelProps) => {
   const level = getWisdomLevel(churnCount);
+
+  if (compact) {
+    return (
+      <div className="bg-card/50 border border-border/30 rounded-lg px-3 py-2 flex items-center gap-2">
+        <span className="text-lg">{level.icon}</span>
+        <div className="text-left">
+          <div className={`text-xs font-bold ${level.color}`}>
+            {level.title}
+          </div>
+          <div className="text-[10px] text-muted-foreground">
+            {churnCount} churns
+          </div>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="fixed top-4 right-4 z-30 animate-fade-in">
